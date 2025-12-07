@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Copy, Plus, X, Settings, Check, Edit3, Eye, Trash2, FileText, Pencil, Copy as CopyIcon, Globe, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
+import { Copy, Plus, X, Settings, Check, Edit3, Eye, Trash2, FileText, Pencil, Copy as CopyIcon, Globe, ChevronDown, ChevronUp, GripVertical, Download, Image as ImageIcon } from 'lucide-react';
+import html2canvas from 'html2canvas';
 
 // --- 翻译配置 (Translations) ---
 const TRANSLATIONS = {
@@ -12,6 +13,7 @@ const TRANSLATIONS = {
     preview_mode: "预览交互",
     edit_mode: "编辑模版",
     copy_result: "复制结果",
+    export_image: "保存长图",
     copied: "已复制",
     insert: "插入",
     add_option_placeholder: "新增选项...",
@@ -49,6 +51,7 @@ const TRANSLATIONS = {
     preview_mode: "Preview",
     edit_mode: "Edit",
     copy_result: "Copy Result",
+    export_image: "Save Image",
     copied: "Copied",
     insert: "Insert",
     add_option_placeholder: "Add option...",
@@ -293,12 +296,74 @@ const Variable = ({ id, index, config, currentVal, isOpen, onToggle, onSelect, p
   );
 };
 
+// --- Visual Editor Component (New) ---
+const VisualEditor = React.forwardRef(({ value, onChange }, ref) => {
+  const preRef = useRef(null);
+
+  const handleScroll = (e) => {
+    if (preRef.current) {
+      preRef.current.scrollTop = e.target.scrollTop;
+    }
+  };
+
+  const renderHighlights = (text) => {
+    // Split by {{...}}
+    const parts = text.split(/(\{\{[^{}\n]+\}\})/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('{{') && part.endsWith('}}')) {
+         // Style needs to match font metrics exactly, so avoid padding/border that adds width
+         return (
+            <span key={i} className="bg-indigo-100 text-indigo-600 font-bold rounded-sm border-b-2 border-indigo-200">
+               {part}
+            </span>
+         );
+      }
+      return <span key={i}>{part}</span>;
+    });
+  };
+
+  return (
+    <div className="relative w-full h-full overflow-hidden bg-gray-50">
+      {/* Backdrop */}
+      <pre
+        ref={preRef}
+        className="absolute inset-0 p-8 font-mono text-sm leading-relaxed whitespace-pre-wrap break-words pointer-events-none text-gray-800 overflow-hidden m-0"
+        style={{ fontFamily: 'Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }} 
+        aria-hidden="true"
+      >
+        {renderHighlights(value)}
+        <br />
+      </pre>
+
+      {/* Textarea */}
+      <textarea
+        ref={ref}
+        value={value}
+        onChange={onChange}
+        onScroll={handleScroll}
+        className="absolute inset-0 w-full h-full p-8 font-mono text-sm leading-relaxed whitespace-pre-wrap break-words bg-transparent text-transparent caret-gray-800 resize-none focus:outline-none overflow-auto z-10 m-0 selection:bg-indigo-200 selection:text-indigo-900"
+        style={{ fontFamily: 'Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}
+        spellCheck={false}
+      />
+    </div>
+  );
+});
+
 // --- 组件：可折叠的词库组 ---
 const BankGroup = ({ bankKey, bank, onInsert, onDeleteOption, onAddOption, onDeleteBank, t }) => {
     const [isCollapsed, setIsCollapsed] = useState(true);
 
+    const handleDragStart = (e) => {
+        e.dataTransfer.setData('text/plain', `{{${bankKey}}}`);
+        e.dataTransfer.effectAllowed = 'copy';
+    };
+
     return (
-        <div className="bg-gray-50 rounded-lg border border-gray-100 relative group/card hover:border-indigo-200 transition-all overflow-hidden break-inside-avoid mb-3">
+        <div 
+            draggable="true"
+            onDragStart={handleDragStart}
+            className="bg-gray-50 rounded-lg border border-gray-100 relative group/card hover:border-indigo-200 transition-all overflow-hidden break-inside-avoid mb-3 cursor-grab active:cursor-grabbing"
+        >
             {/* Header / Collapsed View */}
             <div 
                 className="flex justify-between items-start p-3 cursor-pointer hover:bg-gray-100 transition-colors"
@@ -395,6 +460,7 @@ const App = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [activePopover, setActivePopover] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   
   // Add Bank State
   const [isAddingBank, setIsAddingBank] = useState(false);
@@ -658,6 +724,55 @@ const App = () => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }).catch(() => {});
+  };
+
+  const handleExportImage = async () => {
+    const element = document.getElementById('preview-card');
+    if (!element) return;
+
+    setIsExporting(true);
+    try {
+        const canvas = await html2canvas(element, {
+            scale: 2, // High resolution
+            useCORS: true,
+            backgroundColor: '#ffffff', // Ensure white background
+            logging: false,
+            onclone: (clonedDoc) => {
+                // You can manipulate the cloned document here if needed (e.g. hide scrollbars)
+                const clonedElement = clonedDoc.getElementById('preview-card');
+                if (clonedElement) {
+                   clonedElement.style.boxShadow = 'none'; // Optional: remove shadow for cleaner export
+                   clonedElement.style.border = 'none';
+                   
+                   // Add Footer Watermark
+                   const footer = clonedDoc.createElement('div');
+                   footer.style.marginTop = '40px';
+                   footer.style.paddingTop = '20px';
+                   footer.style.borderTop = '1px solid #f3f4f6';
+                   footer.style.textAlign = 'center';
+                   footer.style.color = '#9ca3af';
+                   footer.style.fontSize = '12px';
+                   footer.style.fontFamily = 'sans-serif';
+                   footer.innerText = '由“提示词填空器”制作生成，Made by 角落工作室';
+                   
+                   clonedElement.appendChild(footer);
+                }
+            }
+        });
+
+        const image = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.href = image;
+        link.download = `${activeTemplate.name.replace(/\s+/g, '_')}_prompt.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (err) {
+        console.error("Export failed:", err);
+        alert("Export failed. Please try again.");
+    } finally {
+        setIsExporting(false);
+    }
   };
 
   // --- Renderers ---
@@ -963,6 +1078,20 @@ const App = () => {
             <div className="h-6 w-px bg-gray-200 mx-1"></div>
 
             <button
+                onClick={handleExportImage}
+                disabled={isEditing}
+                className={`
+                flex items-center gap-2 px-3 py-2 rounded-lg font-medium shadow-sm transition-all border
+                bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-indigo-600
+                disabled:opacity-50 disabled:cursor-not-allowed
+                `}
+                title={t('export_image')}
+            >
+                <ImageIcon size={18} />
+                <span className="hidden sm:inline">{t('export_image')}</span>
+            </button>
+
+            <button
                 onClick={handleCopy}
                 className={`
                 flex items-center gap-2 px-4 py-2 rounded-lg font-medium shadow-sm transition-all border
@@ -980,16 +1109,17 @@ const App = () => {
         {/* 核心内容区 */}
         <div className="flex-1 overflow-hidden relative">
             {isEditing ? (
-                <textarea
+                <VisualEditor
                     ref={textareaRef}
-                    className="w-full h-full p-8 bg-gray-50 font-mono text-sm text-gray-700 resize-none focus:outline-none leading-relaxed"
                     value={activeTemplate.content}
                     onChange={(e) => updateActiveTemplateContent(e.target.value)}
-                    spellCheck={false}
                 />
             ) : (
                 <div className="w-full h-full overflow-y-auto p-8">
-                     <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-8 min-h-[800px]">
+                     <div 
+                        id="preview-card"
+                        className="max-w-4xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-8 min-h-[800px]"
+                     >
                         <div id="final-prompt-content" className="prose prose-slate max-w-none">
                             {renderTemplateContent()}
                         </div>
