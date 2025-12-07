@@ -430,14 +430,14 @@ const useStickyState = (defaultValue, key) => {
 
 
 // --- 组件：可点击的变量词 ---
-const Variable = ({ id, index, config, currentVal, isOpen, onToggle, onSelect, onAddCustom, popoverRef, t }) => {
+const Variable = ({ id, index, config, currentVal, isOpen, onToggle, onSelect, onAddCustom, popoverRef, categories, t }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [customVal, setCustomVal] = useState("");
 
   // Determine styles based on category
   const categoryId = config?.category || 'other';
-  const colorKey = CATEGORIES[categoryId]?.color || 'slate';
-  const style = CATEGORY_STYLES[colorKey];
+  const colorKey = categories[categoryId]?.color || 'slate';
+  const style = CATEGORY_STYLES[colorKey] || CATEGORY_STYLES.slate;
 
   // Reset state when popover closes
   useEffect(() => {
@@ -481,7 +481,7 @@ const Variable = ({ id, index, config, currentVal, isOpen, onToggle, onSelect, o
           <div className="bg-gray-50 px-3 py-2 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wider flex justify-between items-center">
             <span>{t('select')} {config.label} ({index + 1})</span>
              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${style.badgeBg} ${style.badgeText} font-medium`}>
-                {t(CATEGORIES[categoryId].t_key)}
+                {categories[categoryId]?.label || categoryId}
             </span>
           </div>
           <div className="max-h-60 overflow-y-auto p-2 space-y-1">
@@ -1322,6 +1322,7 @@ const App = () => {
             onSelect={(opt) => handleSelect(key, varIndex, opt)}
             onAddCustom={(val) => handleAddCustomAndSelect(key, varIndex, val)}
             popoverRef={popoverRef}
+            categories={categories}
             t={t}
           />
         );
@@ -1646,6 +1647,7 @@ const App = () => {
                     value={activeTemplate.content}
                     onChange={(e) => updateActiveTemplateContent(e.target.value)}
                     banks={banks}
+                    categories={categories}
                 />
             ) : (
                 <div className="w-full h-full overflow-y-auto p-8">
